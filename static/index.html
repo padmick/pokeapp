@@ -1,0 +1,237 @@
+<head>
+	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.12.4/jquery.min.js"></script>
+    <link rel="stylesheet" type="text/css" href="extrastyle.css">
+</head>
+
+<style>
+    html { height: 100% }
+    body { height: 100%; margin: 0px; padding: 0px }
+    #map_wrapper {
+        height: 100%;
+    }
+
+    #map_canvas {
+        width: 100%;
+        height: 100%;
+    }
+</style>
+
+<button id="more-button">
+    Load More
+</button>
+
+<div id="map_wrapper">
+    <div id="map_canvas" class="mapping">Detecting location...</div>
+</div>
+
+<script>
+
+	// Push over to https
+	if (window.location.protocol != "https:") {
+		window.location.href = "https:" + window.location.href.substring(window.location.protocol.length);
+	}
+
+    var markers = [];
+    var infoWindowContent = [];
+    var marker_images = [];
+    var first_load = true;
+    var savedLocationLat = 0;
+    var savedLocationLong = 0;
+    var steps = 1;
+    var steplimit = 5;
+    var pos = 1;
+    var default_step = 0.001;
+    var moreCount = 1;
+
+
+
+    $("#more-button").click(function() {
+        if (savedLocationLat !== 0 && savedLocationLong !== 0) {
+            console.log("More button clicked");
+
+            var offset = (steps*default_step);
+
+            if (pos === 1) {
+                console.log(" -> Zone 1");
+                build_map_update({ 
+                    coords: { 
+                        latitude: savedLocationLat+offset, 
+                        longitude: savedLocationLong-offset
+                    }});
+            }
+            else if (pos === 2) {
+                console.log(" -> Zone 2");
+                build_map_update({ 
+                    coords: { 
+                        latitude: savedLocationLat+offset, 
+                        longitude: savedLocationLong+offset
+                    }});
+            }
+            else if (pos === 3) {
+                console.log(" -> Zone 3");
+                build_map_update({ 
+                    coords: { 
+                        latitude: savedLocationLat-offset, 
+                        longitude: savedLocationLong-offset
+                    }});
+            }
+            else if (pos === 4) {
+                console.log(" -> Zone 4");
+                build_map_update({ 
+                    coords: { 
+                        latitude: savedLocationLat-offset, 
+                        longitude: savedLocationLong+offset
+                    }});
+                pos = 0;
+                steps += 1;
+            }
+            pos += 1;
+            moreCount += 1;
+        }
+    });
+
+    jQuery(function($) {
+        // Asynchronously Load the map API 
+        var script = document.createElement('script');
+        var key = 'AIzaSyCHH92ANm5Yz7lY1yrDpOAN4K8JmkaOiPw';
+        script.src = "//maps.googleapis.com/maps/api/js?key=" + key + "&sensor=false&callback=map_api_loaded";
+        document.body.appendChild(script);
+    });
+
+    function map_api_loaded() {
+        navigator.geolocation.getCurrentPosition(handler);
+    }
+
+    function build_initial_map(location) {
+    	//Your position
+    	$('#map_canvas').html('');
+    	marker_obj = ["Ashe", location.coords.latitude,location.coords.longitude];
+    	markers.push(marker_obj);
+    	infoWindowContent_obj = ['<div class="info_content"><h3>You</h3></div>'];
+    	infoWindowContent.push(infoWindowContent_obj);
+    	marker_images.push("/static/poke/trainer.gif");
+    	create_map();
+        savedLocationLat = location.coords.latitude;
+        savedLocationLong = location.coords.longitude;
+    	build_map_update(location);
+    }
+
+    function build_map_update(location) {
+    	$.ajax({ 
+    		type: 'POST', 
+    		url: '/get_poke', 
+    		data: { location: location.coords.latitude.toString()+', '+location.coords.longitude.toString() }, 
+    		dataType: 'json',
+    		success: function (data) {
+    			console.log("pokemon_data", data.data);
+    			infoWindowContent = [];
+    			
+                if (first_load) {
+                    first_load = false;
+        			marker_obj = ["Ashe", location.coords.latitude,location.coords.longitude];
+        			markers.push(marker_obj);
+        			infoWindowContent_obj = ['<div class="info_content"><h3>You</h3></div>'];
+        			infoWindowContent.push(infoWindowContent_obj);
+        			marker_images.push("/static/poke/trainer.gif");
+                } else {
+                    marker_obj = ["Update_" + moreCount,location.coords.latitude,location.coords.longitude];
+                    markers.push(marker_obj);
+                    marker_images.push("/static/poke/update.gif");
+                }
+    			
+    			$.each(data.data, function(k, v) {
+    				marker_obj = [v.name, v.latitude,v.longitude];
+    				markers.push(marker_obj);
+    				infoWindowContent_obj = ['<div class="info_content">' + 
+                    '<h3>' + v.name + '</h3>' + 
+                    '<p>will be there for another ' + v.time_left + ' seconds.</p>' + 
+                    '</div>'];
+    				infoWindowContent.push(infoWindowContent_obj);
+    				marker_images.push("/static/poke/" + v.id + ".ico");
+    			});
+
+    			$('#map_canvas').html('');
+    			create_map();
+    			// setTimeout(function(){
+    			// 	navigator.geolocation.getCurrentPosition(handler);
+    			// }, 60000);
+    		},
+    		error: function() {
+    			console.log('Error while attempting to retrieve poke locations');
+    			// setTimeout(function(){
+    			// 	navigator.geolocation.getCurrentPosition(handler);
+    			// }, 5000);
+    		}
+    	});
+    }
+
+    function handler(location) {
+    	if (first_load) {
+            build_initial_map(location);
+        }
+    	else {
+    		build_map_update(location);
+    	}
+    }
+
+    function create_map() {
+        var map;
+        var bounds = new google.maps.LatLngBounds();
+        var mapOptions = {
+            mapTypeId: 'roadmap'
+        };
+                        
+        // Display a map on the page
+        map = new google.maps.Map(document.getElementById("map_canvas"), mapOptions);
+        map.setTilt(45);
+            
+        // Display multiple markers on a map
+        var infoWindow = new google.maps.InfoWindow(), marker, i;
+        
+        // Loop through our array of markers & place each one on the map  
+        for( i = 0; i < markers.length; i++ ) {
+            var position = new google.maps.LatLng(markers[i][1], markers[i][2]);
+            bounds.extend(position);
+
+            marker = new google.maps.Marker({
+    	        position: position,
+    	        map: map,
+    	        title: markers[i][0],
+    	        icon: {
+    	            url: marker_images[i], // url
+    	            scaledSize: new google.maps.Size(60, 60)  // scaled size
+    	        }
+        	});
+    		
+            // Allow each marker to have an info window    
+            google.maps.event.addListener(marker, 'click', (function(marker, i) {
+                return function() {
+                    infoWindow.setContent(infoWindowContent[i][0]);
+                    infoWindow.open(map, marker);
+                }
+            })(marker, i));
+
+            // Automatically center the map fitting all markers on the screen
+            map.fitBounds(bounds);
+        }
+		
+		 //Add a radius marker @300m
+		new google.maps.Circle({
+			strokeColor: '#FF0000',
+			strokeOpacity: 0.8,
+			strokeWeight: 2,
+			fillColor: '#FF0000',
+			fillOpacity: 0,
+			map: map,
+			center: new google.maps.LatLng(markers[0][1], markers[0][2]),
+			radius: 300
+		});
+
+        // Override our map zoom level once our fitBounds function runs (Make sure it only runs once)
+        var boundsListener = google.maps.event.addListener((map), 'bounds_changed', function(event) {
+            this.setZoom(18);
+            google.maps.event.removeListener(boundsListener);
+        });
+        
+    }
+</script>

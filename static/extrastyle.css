@@ -1,0 +1,6 @@
+#more-button {
+	position: absolute;
+	top: 5%;
+	left: 90%;
+	z-index: 50;
+}
